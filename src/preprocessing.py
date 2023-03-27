@@ -7,14 +7,14 @@ import os
 import glob
 
 from tokenizers import Tokenizer
-from tokenizers.models import BPE
-from tokenizers.trainers import BpeTrainer
+from tokenizers.models import BPE, WordPiece
+from tokenizers.trainers import BpeTrainer, WordPieceTrainer
 from tokenizers.pre_tokenizers import Whitespace
 
 import sys
 
 
-def preprocess_wikitext(path):
+def preprocess_wikitext_bpe(path):
     """
     Preprocess wikitext by using bytepair encoding
     """
@@ -41,6 +41,38 @@ def preprocess_wikitext(path):
     return data_out, tokenizer
 
 
+def preprocess_wikitext_wordpeice(path):
+    files = glob.glob(f"{path}/*.tokens")
+
+    tokenizer = Tokenizer(WordPiece())
+
+    tokenizer.pre_tokenizer = Whitespace()
+
+    trainer = WordPieceTrainer(
+        vocab_size=10000, special_tokens=["<unk>", "@-@"], show_progress=True
+    )
+    tokenizer.train(files=files, trainer=trainer)
+
+    data_out = {}
+    for file in files:
+        fname = file.split("/")[-1]
+        with open(file, "r") as f:
+            lines = f.readlines()
+        tokens = tokenizer.encode_batch(lines)
+        data_out[fname] = np.concatenate(
+            [np.array(t.ids, dtype=np.int32) for t in tokens]
+        )
+
+    return data_out, tokenizer
+
+
+def preprocess_wikitext_char(path):
+    """
+    Preprocess wikitext using character tokenization
+    """
+    return NotImplementedError
+
+
 if __name__ == "__main__":
     # Preprocess and save the data to disk
     # this avoids the issues with huggingface tokenizer parrelelism
@@ -53,7 +85,7 @@ if __name__ == "__main__":
     print("Tokenizing data...")
     hparams = Hparams()
     os.makedirs(hparams.tokenized_dir, exist_ok=True)
-    data, tokenizer = preprocess_wikitext(hparams.path)
+    data, tokenizer = preprocess_wikitext_wordpeice(hparams.path)
 
     print("Saving tokenized data...")
     np.savez_compressed(

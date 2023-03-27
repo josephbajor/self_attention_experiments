@@ -4,7 +4,6 @@ import os
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
 
-from src.preprocessing import preprocess_wikitext
 from hparams import Hparams
 
 
