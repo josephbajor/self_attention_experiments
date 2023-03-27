@@ -41,7 +41,7 @@ def preprocess_wikitext_bpe(path):
     return data_out, tokenizer
 
 
-def preprocess_wikitext_wordpeice(path):
+def preprocess_wikitext_wordpeice(path, vocab_size):
     files = glob.glob(f"{path}/*.tokens")
 
     tokenizer = Tokenizer(WordPiece())
@@ -49,7 +49,7 @@ def preprocess_wikitext_wordpeice(path):
     tokenizer.pre_tokenizer = Whitespace()
 
     trainer = WordPieceTrainer(
-        vocab_size=10000, special_tokens=["<unk>", "@-@"], show_progress=True
+        vocab_size=vocab_size, special_tokens=["<unk>", "@-@"], show_progress=True
     )
     tokenizer.train(files=files, trainer=trainer)
 
@@ -76,6 +76,7 @@ def preprocess_wikitext_char(path):
 if __name__ == "__main__":
     # Preprocess and save the data to disk
     # this avoids the issues with huggingface tokenizer parrelelism
+    # also speeds things up quite a bit
 
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
     sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -85,7 +86,7 @@ if __name__ == "__main__":
     print("Tokenizing data...")
     hparams = Hparams()
     os.makedirs(hparams.tokenized_dir, exist_ok=True)
-    data, tokenizer = preprocess_wikitext_wordpeice(hparams.path)
+    data, tokenizer = preprocess_wikitext_wordpeice(hparams.path, hparams.vocab_size)
 
     print("Saving tokenized data...")
     np.savez_compressed(
