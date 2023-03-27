@@ -20,10 +20,10 @@ class Wiki103Dataset(torch.utils.data.Dataset):
         self.len = len(data) - (block_size + 1)
 
     def __getitem__(self, idx):
-        x = self.data[idx : self.block_size]
-        y = self.data[idx + 1 : self.block_size]
+        x = self.data[idx : idx + self.block_size]
+        y = self.data[idx + 1 : idx + self.block_size + 1]
 
-        return torch.Tensor(x), torch.Tensor(y)
+        return torch.tensor(x, dtype=torch.long), torch.tensor(y, dtype=torch.long)
 
     def __len__(self):
         return self.len
