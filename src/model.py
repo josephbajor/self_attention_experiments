@@ -65,6 +65,13 @@ class FullAttention(nn.Module):
         return z
 
 
+class FnetAttention(nn.Module):
+    def __init__(self, max_seq_len, embed_size, block_size, autoregressive=False):
+        super().__init__()
+
+        self.max_seq_len = max_seq_len
+
+
 class AttentionLM(nn.Module):
     def __init__(self, hparams: Hparams, vocab_size) -> None:
         super().__init__()
