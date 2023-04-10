@@ -31,18 +31,21 @@ class SimpleBigramModel(nn.Module):
 
 
 class FullAttention(nn.Module):
-    def __init__(self, max_seq_len, embed_size, block_size, autoregressive=False):
+    def __init__(self, max_seq_len, embed_size, block_size, masked=False):
         super().__init__()
 
         self.max_seq_len = max_seq_len
+        self.block_size = block_size
 
         self.q = nn.Linear(embed_size, block_size, bias=False)
         self.k = nn.Linear(embed_size, block_size, bias=False)
         self.v = nn.Linear(embed_size, block_size, bias=False)
 
-        self.autoregressive = autoregressive
-        if autoregressive:
-            self.mask = torch.tril(torch.ones(max_seq_len, max_seq_len))
+        self.masked = masked
+        if masked:
+            self.register_buffer(
+                "mask", torch.tril(torch.ones(max_seq_len, max_seq_len))
+            )
 
     def forward(self, x):
         q = self.q(x)
@@ -50,14 +53,14 @@ class FullAttention(nn.Module):
         v = self.v(x)
 
         attention_values = q @ k.transpose(-2, -1)
-        if self.autoregressive:
+        if self.masked:
             attention_values = attention_values.masked_fill(
                 self.mask == 0, float("-inf")
             )
 
-        attention_values = attention_values / torch.sqrt(self.block_size)
+        attention_values = attention_values / np.sqrt(self.block_size)
         attention_values = F.softmax(
-            attention_values / torch.sqrt(self.block_size), dim=-1
+            attention_values / np.sqrt(self.block_size), dim=-1
         )
 
         z = attention_values @ v
@@ -66,10 +69,37 @@ class FullAttention(nn.Module):
 
 
 class FnetAttention(nn.Module):
-    def __init__(self, max_seq_len, embed_size, block_size, autoregressive=False):
+    def __init__(self, max_seq_len, embed_size, block_size, masked=False):
         super().__init__()
 
         self.max_seq_len = max_seq_len
+        self.fft = torch.fft.fftn()
+
+
+class AttentionBlock(nn.Module):
+    def __init__(
+        self,
+        att: nn.Module,
+        max_seq_len,
+        embed_size,
+        block_size,
+        num_heads,
+        out_size,
+        masked=False,
+    ):
+        super().__init__()
+
+        self.att = nn.ModuleList(
+            [att(max_seq_len, embed_size, block_size, masked) for _ in range(num_heads)]
+        )
+        self.lin = nn.Linear(block_size * num_heads, out_size)
+
+    def forward(self, x):
+        x_out = torch.cat([layer(x) for layer in self.att], dim=-1)
+        x_out = self.lin(x_out)
+        x_out = F.relu(x_out)
+
+        return x_out
 
 
 class AttentionLM(nn.Module):
@@ -82,7 +112,16 @@ class AttentionLM(nn.Module):
         # Network Components
         self.embed = nn.Embedding(vocab_size, hparams.embed_size)
         self.embed_pos = nn.Embedding(hparams.max_span, hparams.embed_size)
-        self.l1 = nn.Linear(hparams.embed_size, vocab_size)
+        self.max_span = hparams.max_span
+
+        self.attention = AttentionBlock(
+            att=FullAttention,
+            max_seq_len=hparams.max_span,
+            embed_size=hparams.embed_size,
+            block_size=hparams.att_block_size,
+            num_heads=hparams.num_heads,
+            out_size=vocab_size,
+        )
 
     def forward(self, x):
         emb = self.embed(x)
@@ -91,21 +130,22 @@ class AttentionLM(nn.Module):
         x = emb + pos_emb
         x = F.gelu(x)
 
-        logits = self.l1(x)
+        logits = self.attention(x)
 
         return logits
 
     def generate_batch(self, x, seq_len, deterministic=False):
-        if len(x.shape) == 2:
+        if len(x.shape) == 1:
             x = x.unsqueeze(dim=0)
 
         for seq in range(seq_len):
+            input = x[:, -self.max_span :]
             logits = self(x)[:, -1, :]
             probs = F.softmax(logits, dim=-1)
             if deterministic:
                 next_idx = torch.argmax(dim=1)
             else:
-                next_idx = torch.multinomial(input=probs, dim=1, num_samples=1)
+                next_idx = torch.multinomial(input=probs, num_samples=1)
 
             x = torch.cat((x, next_idx), dim=1)
 

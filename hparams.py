@@ -9,7 +9,7 @@ class Hparams:
     tokenized_dir: str = "data"
     vocab_size: int = 1000
 
-    num_workers = 4
+    num_workers = 1
     batch_size = 128
     epochs = 25
 

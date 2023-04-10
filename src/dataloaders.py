@@ -44,9 +44,9 @@ def build_loaders(hparams: Hparams):
         )
     tokenizer = Tokenizer.from_file(tokenizer_path)
 
-    train_set = Wiki103Dataset(data["train"], block_size=hparams.block_size)
-    val_set = Wiki103Dataset(data["val"], block_size=hparams.block_size)
-    test_set = Wiki103Dataset(data["test"], block_size=hparams.block_size)
+    train_set = Wiki103Dataset(data["train"], block_size=hparams.max_span)
+    val_set = Wiki103Dataset(data["val"], block_size=hparams.max_span)
+    test_set = Wiki103Dataset(data["test"], block_size=hparams.max_span)
 
     train_loader = torch.utils.data.DataLoader(
         train_set,
