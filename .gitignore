@@ -1,5 +1,6 @@
 # Project specific
 data/
+wikitext-103/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
