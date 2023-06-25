@@ -21,6 +21,10 @@ def preprocess_wikitext_bpe(path):
 
     files = glob.glob(f"{path}/*.tokens")
 
+    #ensure that there is data in the pointed directory
+    if len(files) == 0:
+        raise AssertionError(f'no token files found in {path} (is you data directory correct?)')
+
     tokenizer = Tokenizer(BPE())
 
     tokenizer.pre_tokenizer = Whitespace()
@@ -43,6 +47,10 @@ def preprocess_wikitext_bpe(path):
 
 def preprocess_wikitext_wordpeice(path, vocab_size):
     files = glob.glob(f"{path}/*.tokens")
+
+    #ensure that there is data in the pointed directory
+    if len(files) == 0:
+        raise AssertionError(f'no token files found in {path} (is you data directory correct?)')
 
     tokenizer = Tokenizer(WordPiece())
 
