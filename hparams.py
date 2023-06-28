@@ -3,9 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class Hparams:
-    path: str = (
-        "wikitext-103"
-    )
+    path: str = "wikitext-103"
     tokenized_dir: str = "data"
     vocab_size: int = 3000
 
@@ -17,3 +15,5 @@ class Hparams:
     embed_size = 128
     att_block_size = 64
     num_heads = 3
+
+    windowed_loss_buffer_size: int = 100
