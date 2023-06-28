@@ -4,7 +4,7 @@ from dataclasses import dataclass
 @dataclass
 class Hparams:
     path: str = (
-        "/home/jbajor/Dev/CMU/Research/fairseq/examples/language_model/wikitext-103"
+        "wikitext-103"
     )
     tokenized_dir: str = "data"
     vocab_size: int = 3000

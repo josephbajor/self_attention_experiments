@@ -79,7 +79,7 @@ class FnetAttention(nn.Module):
 class AttentionBlock(nn.Module):
     def __init__(
         self,
-        att: nn.Module,
+        attention_func: nn.Module,
         max_seq_len,
         embed_size,
         block_size,
@@ -89,13 +89,13 @@ class AttentionBlock(nn.Module):
     ):
         super().__init__()
 
-        self.att = nn.ModuleList(
-            [att(max_seq_len, embed_size, block_size, masked) for _ in range(num_heads)]
+        self.attention_heads = nn.ModuleList(
+            [attention_func(max_seq_len, embed_size, block_size, masked) for _ in range(num_heads)]
         )
         self.lin = nn.Linear(block_size * num_heads, out_size)
 
     def forward(self, x):
-        x_out = torch.cat([layer(x) for layer in self.att], dim=-1)
+        x_out = torch.cat([layer(x) for layer in self.attention_heads], dim=-1)
         x_out = self.lin(x_out)
         x_out = F.relu(x_out)
 
@@ -103,19 +103,20 @@ class AttentionBlock(nn.Module):
 
 
 class AttentionLM(nn.Module):
-    def __init__(self, hparams: Hparams, vocab_size) -> None:
+    def __init__(self, hparams: Hparams, vocab_size, device) -> None:
         super().__init__()
 
         # self.vocab_size = vocab_size
         # self.embed_size = hparams.embed_size
 
         # Network Components
+        self.device = device
         self.embed = nn.Embedding(vocab_size, hparams.embed_size)
         self.embed_pos = nn.Embedding(hparams.max_span, hparams.embed_size)
         self.max_span = hparams.max_span
 
         self.attention = AttentionBlock(
-            att=FullAttention,
+            attention_func=FullAttention,
             max_seq_len=hparams.max_span,
             embed_size=hparams.embed_size,
             block_size=hparams.att_block_size,
@@ -125,7 +126,7 @@ class AttentionLM(nn.Module):
 
     def forward(self, x):
         emb = self.embed(x)
-        pos_emb = self.embed_pos(torch.arange(x.shape[-1], device="cuda"))
+        pos_emb = self.embed_pos(torch.arange(x.shape[-1], device=self.device))
 
         x = emb + pos_emb
         x = F.gelu(x)
@@ -139,14 +140,15 @@ class AttentionLM(nn.Module):
             x = x.unsqueeze(dim=0)
 
         for seq in range(seq_len):
-            input = x[:, -self.max_span :]
-            logits = self(x)[:, -1, :]
+            input = x[:, -self.max_span:]
+            logits = self(input)[:, -1, :]
             probs = F.softmax(logits, dim=-1)
             if deterministic:
-                next_idx = torch.argmax(dim=1)
+                next_idx = torch.argmax(input = probs, dim=1)
             else:
                 next_idx = torch.multinomial(input=probs, num_samples=1)
 
-            x = torch.cat((x, next_idx), dim=1)
+            next_idx = next_idx.unsqueeze(dim=0)
+            x = torch.cat((x, next_idx), dim=-1)
 
         return x

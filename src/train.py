@@ -16,27 +16,29 @@ from tokenizers.pre_tokenizers import Whitespace
 
 from src.model import SimpleBigramModel, AttentionLM
 from src.dataloaders import build_loaders
+from src.inference import inference
 from hparams import Hparams
 
 
-def train():
+
+def train(device = 'cuda'):
     hparams = Hparams()
 
     tokenizer, train_loader, _, _ = build_loaders(hparams)
 
-    model = AttentionLM(hparams, vocab_size=tokenizer.get_vocab_size())
-    model = model.to("cuda")
+    model = AttentionLM(hparams, vocab_size=tokenizer.get_vocab_size(), device = device)
+    model = model.to(device)
 
     loss_fn = torch.nn.CrossEntropyLoss()
     optim = torch.optim.AdamW(model.parameters())
 
     model.train()
     for epoch in range(hparams.epochs):
-        for x, y in tqdm(train_loader):
+        for step, (x, y) in tqdm(enumerate(train_loader)):
             optim.zero_grad()
 
-            x = x.to("cuda")
-            y = y.to("cuda")
+            x = x.to(device)
+            y = y.to(device)
 
             logits = model(x)
             B, T, C = logits.shape
@@ -47,5 +49,23 @@ def train():
 
             loss.backward()
             optim.step()
+
+            if step%3000 == 0:
+                tests = [
+                    'Hello ',
+                    'The',
+                    'W',
+                ]
+                
+                print(f'generation test | step {step}:')
+
+                for test in tests:
+                    test_gen = inference(test, model, tokenizer, out_len=60, determenistic=True, device=device)
+                    print(test_gen)
+
+                
+            if step%10000 == 0:
+                torch.save(model.state_dict(), hparams.tokenized_dir + '/model.pth')
+                
 
         print(loss)
