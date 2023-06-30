@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 import torch
 import torch.nn.functional as F
+from torchinfo import summary
 
 import os
 import glob
@@ -30,6 +31,9 @@ def train(device="cuda"):
 
     loss_fn = torch.nn.CrossEntropyLoss()
     optim = torch.optim.AdamW(model.parameters())
+
+    x_samp, _ = train_loader.dataset[0]
+    print(summary(model, input_data=x_samp.to(device)))
 
     model.train()
 

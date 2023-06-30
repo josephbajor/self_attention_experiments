@@ -75,6 +75,22 @@ class FnetAttention(nn.Module):
         self.max_seq_len = max_seq_len
         self.fft = torch.fft.fftn()
 
+        self.q = nn.Linear(embed_size, block_size, bias=False)
+        self.k = nn.Linear(embed_size, block_size, bias=False)
+        self.v = nn.Linear(embed_size, block_size, bias=False)
+
+        if masked:
+            self.register_buffer(
+                "mask", torch.tril(torch.ones(max_seq_len, max_seq_len))
+            )
+
+    def forward(self, x):
+        q = self.q(x)
+        k = self.k(x)
+        v = self.v(x)
+
+        attention_values = self.fft(q)
+
 
 class AttentionBlock(nn.Module):
     def __init__(
@@ -90,7 +106,10 @@ class AttentionBlock(nn.Module):
         super().__init__()
 
         self.attention_heads = nn.ModuleList(
-            [attention_func(max_seq_len, embed_size, block_size, masked) for _ in range(num_heads)]
+            [
+                attention_func(max_seq_len, embed_size, block_size, masked)
+                for _ in range(num_heads)
+            ]
         )
         self.lin = nn.Linear(block_size * num_heads, out_size)
 
@@ -100,6 +119,31 @@ class AttentionBlock(nn.Module):
         x_out = F.relu(x_out)
 
         return x_out
+
+
+class BinaryPosEmbedding(nn.Module):
+    def __init__(self, block_size, device: str, universal: bool = False) -> None:
+        super().__init__()
+        self.device = device
+        self.universal = universal
+
+        self.E1 = nn.Linear(block_size, block_size)
+        if not self.universal:
+            self.E2 = nn.Linear(block_size, block_size)
+
+    def forward(self, q, k):
+        self.index = torch.arange(q.shape[-1], device=self.device)
+
+        e1_embedding = self.E1(self.index)
+
+        q_pos = q + e1_embedding
+        if not self.universal:
+            e2_embedding = self.E2(self.index)
+            k_pos = k + e2_embedding
+        else:
+            k_pos = k + e1_embedding
+
+        return q_pos, k_pos
 
 
 class AttentionLM(nn.Module):
@@ -116,7 +160,7 @@ class AttentionLM(nn.Module):
         self.max_span = hparams.max_span
 
         self.attention = AttentionBlock(
-            attention_func=FullAttention,
+            attention_func=FnetAttention,
             max_seq_len=hparams.max_span,
             embed_size=hparams.embed_size,
             block_size=hparams.att_block_size,
@@ -140,11 +184,11 @@ class AttentionLM(nn.Module):
             x = x.unsqueeze(dim=0)
 
         for seq in range(seq_len):
-            input = x[:, -self.max_span:]
+            input = x[:, -self.max_span :]
             logits = self(input)[:, -1, :]
             probs = F.softmax(logits, dim=-1)
             if deterministic:
-                next_idx = torch.argmax(input = probs, dim=1)
+                next_idx = torch.argmax(input=probs, dim=1)
             else:
                 next_idx = torch.multinomial(input=probs, num_samples=1)
 

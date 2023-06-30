@@ -9,11 +9,11 @@ class Hparams:
 
     num_workers = 4
     batch_size = 128
-    epochs = 25
+    epochs = 5
 
     max_span = 64
     embed_size = 128
-    att_block_size = 64
-    num_heads = 3
+    att_block_size = 128
+    num_heads = 2
 
     windowed_loss_buffer_size: int = 100
