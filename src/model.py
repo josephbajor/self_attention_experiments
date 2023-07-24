@@ -99,9 +99,11 @@ class FnetAttentionWithBinaryPosEmb(nn.Module):
                 "mask", torch.tril(torch.ones(max_seq_len, max_seq_len))
             )
 
-        self.binary_emb = BinaryPosEmbedding(
-            block_size=block_size, device=device, universal=universal
-        )
+        # self.binary_emb = BinaryPosEncoding(
+        #     block_size=block_size, device=device, universal=universal
+        # )
+
+        self.binary_emb = StaticBinaryPosEncoding(block_size=block_size, device=device)
 
     @torch.cuda.amp.autocast(enabled=False)
     def fft_fwd(self, hidden):
@@ -146,47 +148,21 @@ class AttentionBlock(nn.Module):
         return x_out
 
 
-class BinaryLinear(nn.Module):
-    def __init__(
-        self, input_dim, output_dim, learnable_threshold: bool = False, bias=False
-    ) -> None:
+class StaticBinaryPosEncoding(nn.Module):
+    def __init__(self, block_size, device: str) -> None:
         super().__init__()
+        self.device = device
+
+    def forward(self, q, k):
+        emb = torch.tril(torch.ones(size=q.shape()))
+
+        q += emb
+        k += emb
+
+        return q, k
 
 
-# Currently binary embedding does not crash but weights do not update. no gradient is calculated
-# is the approach differentiable?
-# class BinaryPosEmbedding(nn.Module):
-#     def __init__(self, block_size, device: str, universal: bool = False) -> None:
-#         super().__init__()
-#         self.device = device
-#         self.universal = universal
-
-#         self.E1 = nn.Linear(block_size, block_size, bias=False)
-#         if not self.universal:
-#             self.E2 = nn.Linear(block_size, block_size, bias=False)
-
-#     def clip_grad(self):
-#         # Might be possible to detatch weights from the compute graph and
-#         # manually update them by rounding
-#         # Might not work with autograd
-#         pass
-
-#     def forward(self, q, k):
-#         self.index = torch.arange(q.shape[-1], device=self.device, dtype=torch.float32)
-
-#         e1_embedding = (F.sigmoid(self.E1(self.index)) > 0.5).float()
-
-#         q_pos = q + e1_embedding
-#         if not self.universal:
-#             e2_embedding = (F.sigmoid(self.E2(self.index)) > 0.5).float()
-#             k_pos = k + e2_embedding
-#         else:
-#             k_pos = k + e1_embedding
-
-#         return q_pos, k_pos
-
-
-class BinaryPosEmbedding(nn.Module):
+class BinaryPosEncoding(nn.Module):
     def __init__(self, block_size, device: str, universal: bool = False) -> None:
         super().__init__()
         self.device = device
@@ -203,9 +179,11 @@ class BinaryPosEmbedding(nn.Module):
         pass
 
     def forward(self, q, k):
-        self.index = torch.arange(q.shape[-1], device=self.device, dtype=torch.float32)
+        self.index = torch.arange(
+            q.shape[-1], device=self.device, dtype=torch.float32
+        ).repeat(q.shape[-2], 1)
 
-        e1_embedding = (F.sigmoid(self.E1(self.index)) > 0.5).float()
+        e1_embedding = torch.round(F.sigmoid(self.E1(self.index)))
 
         q_pos = q + e1_embedding
         if not self.universal:
