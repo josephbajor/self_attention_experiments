@@ -5,6 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from hparams import Hparams
 
+from src.utils import generate_rand_emb
+
 
 class AttentionFunc:
     def __init__(self) -> None:
@@ -103,7 +105,9 @@ class FnetAttentionWithBinaryPosEmb(nn.Module):
         #     block_size=block_size, device=device, universal=universal
         # )
 
-        self.binary_emb = StaticBinaryPosEncoding(block_size=block_size, device=device)
+        self.binary_emb = StaticBinaryPosEncoding(
+            block_size=block_size, max_span=max_seq_len, device=device
+        )
 
     @torch.cuda.amp.autocast(enabled=False)
     def fft_fwd(self, hidden):
@@ -149,17 +153,21 @@ class AttentionBlock(nn.Module):
 
 
 class StaticBinaryPosEncoding(nn.Module):
-    def __init__(self, block_size, device: str) -> None:
+    def __init__(self, block_size, max_span, device: str) -> None:
         super().__init__()
         self.device = device
 
+        self.emb = torch.tensor(generate_rand_emb(block_size, max_span)).to(device)
+
     def forward(self, q, k):
-        emb = torch.tril(torch.ones(size=q.shape()))
+        if len(q.shape) > 2:
+            emb = self.emb.repeat(q.shape[0], 1, 1)
+        else:
+            emb = self.emb
+        q_out = q + emb
+        k_out = k + emb
 
-        q += emb
-        k += emb
-
-        return q, k
+        return q_out, k_out
 
 
 class BinaryPosEncoding(nn.Module):
