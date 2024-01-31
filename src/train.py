@@ -15,7 +15,7 @@ from tokenizers.models import BPE
 from tokenizers.trainers import BpeTrainer
 from tokenizers.pre_tokenizers import Whitespace
 
-from src.model import SimpleBigramModel, AttentionLM
+from model.LM import SimpleBigramModel, AttentionLM
 from src.dataloaders import build_loaders
 from src.inference import inference
 from hparams import Hparams
