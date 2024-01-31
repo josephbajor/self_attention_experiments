@@ -5,8 +5,8 @@ import torch.nn.functional as F
 from hparams import Hparams
 from typing import Literal, Optional
 
-from attention import ATT_FUNC_MAP, AttentionBlock
-from encoding import ENC_FUNC_MAP
+from src.model.attention import ATT_FUNC_MAP, AttentionBlock
+from src.model.encoding import ENC_FUNC_MAP
 
 
 class SimpleBigramModel(nn.Module):
@@ -53,11 +53,9 @@ class AttentionLM(nn.Module):
 
         self.attention = AttentionBlock(
             attention_func=ATT_FUNC_MAP[att_func_type],
-            max_seq_len=hparams.max_span,
-            embed_size=hparams.embed_size,
-            block_size=hparams.att_block_size,
-            num_heads=hparams.num_heads,
+            hparams=hparams,
             out_size=vocab_size,
+            emb_func=ENC_FUNC_MAP[emb_func] if emb_func is not None else None,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
