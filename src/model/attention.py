@@ -5,13 +5,14 @@ import torch.nn.functional as F
 from hparams import Hparams
 from typing import Literal, Optional
 
+from src.model.standard_components import FeedForward
+
 
 class AttentionBlock(nn.Module):
     def __init__(
         self,
         attention_func: nn.Module,
         hparams: Hparams,
-        out_size: int,
         emb_func: Optional[nn.Module] = None,
     ):
         super().__init__()
@@ -19,16 +20,22 @@ class AttentionBlock(nn.Module):
         self.num_heads = hparams.num_heads
         self.block_size = hparams.att_block_size
         self.embed_size = hparams.embed_size
+        self.ff_hidden_size = hparams.ff_hidden_size
+        self.dropout = hparams.dropout
 
         self.attention_heads = nn.ModuleList(
             [attention_func(hparams, emb_func) for _ in range(self.num_heads)]
         )
-        self.lin = nn.Linear(self.block_size * self.num_heads, out_size)
+        self.ff = FeedForward(
+            input_size=self.num_heads * self.block_size,
+            hidden_size=self.ff_hidden_size,
+            out_size=self.embed_size,
+            dropout=self.dropout,
+        )
 
     def forward(self, x):
         x_out = torch.cat([layer(x) for layer in self.attention_heads], dim=-1)
-        x_out = self.lin(x_out)
-        x_out = F.relu(x_out)
+        x_out = self.ff(x_out)
 
         return x_out
 

@@ -1,6 +1,7 @@
 # Project specific
 data/
 wikitext-103/
+torchexplorer_standalone/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

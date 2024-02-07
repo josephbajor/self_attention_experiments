@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -37,7 +36,7 @@ class AttentionLM(nn.Module):
     def __init__(
         self,
         hparams: Hparams,
-        vocab_size,
+        vocab_size: int,
         att_func_type: Literal["full", "fnet"],
         emb_func: Optional[Literal["binary_static", "binary_learned"]] = None,
     ) -> None:
@@ -51,12 +50,18 @@ class AttentionLM(nn.Module):
             self.embed_pos = nn.Embedding(hparams.max_span, hparams.embed_size)
         self.max_span = hparams.max_span
 
-        self.attention = AttentionBlock(
-            attention_func=ATT_FUNC_MAP[att_func_type],
-            hparams=hparams,
-            out_size=vocab_size,
-            emb_func=ENC_FUNC_MAP[emb_func] if emb_func is not None else None,
+        self.attention = nn.ModuleList(
+            [
+                AttentionBlock(
+                    attention_func=ATT_FUNC_MAP[att_func_type],
+                    hparams=hparams,
+                    emb_func=ENC_FUNC_MAP[emb_func] if emb_func is not None else None,
+                )
+                for _ in range(hparams.att_layers)
+            ]
         )
+
+        self.linear = nn.Linear(hparams.embed_size, vocab_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         emb = self.embed(x)
@@ -67,9 +72,12 @@ class AttentionLM(nn.Module):
 
         x = F.gelu(x)
 
-        logits = self.attention(x)
+        for layer in self.attention:
+            x = layer(x)
 
-        return logits
+        x = self.linear(x)
+
+        return x
 
     def generate_batch(self, x, seq_len, deterministic=False):
         if len(x.shape) == 1:
