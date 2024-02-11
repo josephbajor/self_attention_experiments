@@ -1,8 +1,0 @@
-{
-    "path": "wikitext-103",
-    "tokenized_dir": "data",
-    "vocab_size": 3000,
-    "model_directory": "checkpoints",
-    "use_positional_embedding": true,
-    "universal_pos_enc": false
-}

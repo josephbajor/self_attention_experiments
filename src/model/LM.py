@@ -37,8 +37,6 @@ class AttentionLM(nn.Module):
         self,
         hparams: Hparams,
         vocab_size: int,
-        att_func_type: Literal["full", "fnet"],
-        emb_func: Optional[Literal["binary_static", "binary_learned"]] = None,
     ) -> None:
         super().__init__()
 
@@ -49,6 +47,9 @@ class AttentionLM(nn.Module):
         if self.use_positional_embedding:
             self.embed_pos = nn.Embedding(hparams.max_span, hparams.embed_size)
         self.max_span = hparams.max_span
+
+        att_func_type = hparams.att_func_type
+        emb_func = hparams.emb_func
 
         self.attention = nn.ModuleList(
             [

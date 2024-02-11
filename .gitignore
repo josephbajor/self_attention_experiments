@@ -1,5 +1,6 @@
 # Project specific
 data/
+checkpoints/
 wikitext-103/
 torchexplorer_standalone/
 
