@@ -52,6 +52,7 @@ class FullAttention(nn.Module):
         self.max_seq_len = hparams.max_span
         self.block_size = hparams.att_block_size
         self.embed_size = hparams.embed_size
+        self.use_flash = hparams.use_flash
 
         self.q = nn.Linear(self.embed_size, self.block_size, bias=False)
         self.k = nn.Linear(self.embed_size, self.block_size, bias=False)
@@ -62,6 +63,8 @@ class FullAttention(nn.Module):
             self.register_buffer(
                 "mask", torch.tril(torch.ones(self.max_seq_len, self.max_seq_len))
             )
+        else:
+            self.mask = None
 
         if emb_func is not None:
             self.emb = emb_func(hparams)
@@ -76,18 +79,24 @@ class FullAttention(nn.Module):
         if self.emb is not None:
             q, k = self.emb(q, k)
 
-        attention_values = q @ k.transpose(-2, -1)
-        if self.masked:
-            attention_values = attention_values.masked_fill(
-                self.mask == 0, float("-inf")
+        if self.use_flash:
+            z = F.scaled_dot_product_attention(
+                q, k, v, attn_mask=self.mask, is_causal=True
             )
 
-        attention_values = attention_values / np.sqrt(self.block_size)
-        attention_values = F.softmax(
-            attention_values / np.sqrt(self.block_size), dim=-1
-        )
+        else:
+            attention_values = q @ k.transpose(-2, -1)
+            if self.masked:
+                attention_values = attention_values.masked_fill(
+                    self.mask == 0, float("-inf")
+                )
 
-        z = attention_values @ v
+            attention_values = attention_values / np.sqrt(self.block_size)
+            attention_values = F.softmax(
+                attention_values / np.sqrt(self.block_size), dim=-1
+            )
+
+            z = attention_values @ v
 
         return z
 

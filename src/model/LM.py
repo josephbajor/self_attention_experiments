@@ -64,6 +64,9 @@ class AttentionLM(nn.Module):
 
         self.linear = nn.Linear(hparams.embed_size, vocab_size)
 
+    def get_param_count(self):
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         emb = self.embed(x)
 
@@ -85,15 +88,17 @@ class AttentionLM(nn.Module):
             x = x.unsqueeze(dim=0)
 
         for seq in range(seq_len):
+            # clip input to our max length
             input = x[:, -self.max_span :]
+
             logits = self(input)[:, -1, :]
             probs = F.softmax(logits, dim=-1)
             if deterministic:
                 next_idx = torch.argmax(input=probs, dim=1)
+                next_idx = next_idx.unsqueeze(dim=0)
             else:
                 next_idx = torch.multinomial(input=probs, num_samples=1)
 
-            next_idx = next_idx.unsqueeze(dim=0)
             x = torch.cat((x, next_idx), dim=-1)
 
         return x
