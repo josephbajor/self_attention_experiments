@@ -27,7 +27,7 @@ from tokenizers.trainers import BpeTrainer
 from tokenizers.pre_tokenizers import Whitespace
 
 from src.model.LM import SimpleBigramModel, AttentionLM
-from src.dataloaders import build_loaders
+from src.dataloaders import build_loaders, build_loaders_shakespeare
 from src.inference import inference
 from hparams import Hparams
 
@@ -35,7 +35,13 @@ from hparams import Hparams
 def train(device="cuda"):
     hparams = Hparams()
 
-    tokenizer, train_loader, val_loader, _ = build_loaders(hparams)
+    logger.info(f"Training on device: {device}")
+
+    if hparams.dataset == "wikitext":
+        tokenizer, train_loader, val_loader, _ = build_loaders(hparams)
+    elif hparams.dataset == "shakespeare":
+        tokenizer, train_loader, val_loader = build_loaders_shakespeare(hparams)
+
     logger.info(f"Vocab Size: {tokenizer.get_vocab_size()}")
     logger.info(f"Train Size: {len(train_loader.dataset)}")
     logger.info(f"Val Size: {len(val_loader.dataset)}")
@@ -104,31 +110,31 @@ def train(device="cuda"):
                 )
                 optim.zero_grad(set_to_none=True)
 
-                if step % 1000 == 0:
-                    # evaluate model
-                    model.eval()
-                    val_loss = 0
-                    val_task = progress.add_task(
-                        "[cyan]Validating...",
-                        total=len(val_loader),
-                        loss="Initializing...",
-                    )
-                    for val_step, (x, y) in enumerate(val_loader):
-                        x = x.to(device)
-                        y = y.to(device)
+                if step % 100 == 0 and step > 0:
+                    # # evaluate model
+                    # model.eval()
+                    # val_loss = 0
+                    # val_task = progress.add_task(
+                    #     "[cyan]Validating...",
+                    #     total=len(val_loader),
+                    #     loss="Initializing...",
+                    # )
+                    # for val_step, (x, y) in enumerate(val_loader):
+                    #     x = x.to(device)
+                    #     y = y.to(device)
 
-                        logits = model(x)
-                        B, T, C = logits.shape
-                        logits = logits.view(B * T, C)
-                        y = y.view(B * T)
+                    #     logits = model(x)
+                    #     B, T, C = logits.shape
+                    #     logits = logits.view(B * T, C)
+                    #     y = y.view(B * T)
 
-                        loss = loss_fn(logits, y)
-                        val_loss += loss.item()
-                        progress.update(
-                            val_task, advance=1, loss=f"Val Loss: {loss/val_step:.5f}"
-                        )
-                    progress.remove_task(val_task)
-                    logger.info(f"Validation Loss: {val_loss / hparams.eval_steps:.5f}")
+                    #     loss = loss_fn(logits, y)
+                    #     val_loss += loss.item()
+                    #     progress.update(
+                    #         val_task, advance=1, loss=f"Val Loss: {loss/val_step:.5f}"
+                    #     )
+                    # progress.remove_task(val_task)
+                    # logger.info(f"Validation Loss: {val_loss / hparams.eval_steps:.5f}")
 
                     # generation test
                     tests = [
@@ -147,13 +153,14 @@ def train(device="cuda"):
                             out_len=20,
                             determenistic=False,
                             device=device,
+                            mode=hparams.dataset,
                         )
                         logger.info(f"{test} -> {test_gen}")
 
                     # put model back into training mode
                     model.train()
 
-                if step % 10000 == 0:
+                if step % 10000 == 0 and step > 0:
                     # save training checkpoint
                     logger.info(f"Saving checkpoint at step {step} to {save_pth}")
                     torch.save(model.state_dict(), f"{save_pth}/model.pth")

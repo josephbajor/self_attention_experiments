@@ -13,6 +13,8 @@ class Hparams:
     model_directory: str = "checkpoints"
     logging_path: str = "logs"
     random_seed: int = 42
+    train_split: float = 0.8  # only used for shakespeare currently
+    dataset: Literal["wikitext", "shakespeare"] = "shakespeare"
 
     ### dataloaders ###
     num_workers: int = 6
