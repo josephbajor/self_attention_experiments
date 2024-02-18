@@ -18,16 +18,14 @@ class AttentionBlock(nn.Module):
         super().__init__()
 
         self.num_heads = hparams.num_heads
-        self.block_size = hparams.att_block_size
         self.embed_size = hparams.embed_size
-        self.ff_hidden_size = hparams.ff_hidden_size
         self.dropout = hparams.dropout
 
         self.attention_heads = nn.ModuleList(
             [attention_func(hparams, emb_func) for _ in range(self.num_heads)]
         )
         self.ff = FeedForward(
-            input_size=self.num_heads * self.block_size,
+            input_size=self.num_heads * self.embed_size,
             hidden_size=self.ff_hidden_size,
             out_size=self.embed_size,
             dropout=self.dropout,
@@ -50,13 +48,12 @@ class FullAttention(nn.Module):
         super().__init__()
 
         self.max_seq_len = hparams.max_span
-        self.block_size = hparams.att_block_size
         self.embed_size = hparams.embed_size
         self.use_flash = hparams.use_flash
 
-        self.q = nn.Linear(self.embed_size, self.block_size, bias=False)
-        self.k = nn.Linear(self.embed_size, self.block_size, bias=False)
-        self.v = nn.Linear(self.embed_size, self.block_size, bias=False)
+        self.q = nn.Linear(self.embed_size, self.embed_size, bias=False)
+        self.k = nn.Linear(self.embed_size, self.embed_size, bias=False)
+        self.v = nn.Linear(self.embed_size, self.embed_size, bias=False)
 
         self.masked = masked
         if masked:
@@ -91,9 +88,8 @@ class FullAttention(nn.Module):
                     self.mask == 0, float("-inf")
                 )
 
-            attention_values = attention_values / np.sqrt(self.block_size)
             attention_values = F.softmax(
-                attention_values / np.sqrt(self.block_size), dim=-1
+                attention_values / np.sqrt(self.embed_size), dim=-1
             )
 
             z = attention_values @ v

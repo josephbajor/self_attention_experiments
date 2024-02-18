@@ -20,19 +20,19 @@ class Hparams:
     num_workers: int = 6
 
     ### training ###
-    batch_size: int = 128
+    batch_size: int = 64
     epochs: int = 2
     windowed_loss_buffer_size: int = 100
-    compile_model = False
-    eval_steps: Optional[int] = 80  # set to none for whole val dataset
+    compile_model = True
+    eval_steps: Optional[int] = 30  # set to none for whole val dataset
 
     ### model ###
-    max_span: int = 128
+    max_span: int = 256
     embed_size: int = 512
-    att_block_size: int = 256
+    # att_block_size: int = 256
     num_heads: int = 3
     att_layers: int = 4
-    ff_hidden_size: int = 256
+    # ff_hidden_size: int = 256
     dropout: float = 0.08
 
     att_func_type: Literal["full", "fnet"] = "full"
@@ -43,8 +43,10 @@ class Hparams:
     universal_pos_enc: bool = False
 
     ### optimizer ###
-    lr = 0.002
+    lr = 1e-3
     weight_decay = 0.01
+    gradient_clip_val = 1.0
+    half_precision = False
 
     ### logging ###
 

@@ -17,7 +17,7 @@ class FeedForward(nn.Module):
 
         self.ff = nn.Sequential(
             nn.Linear(input_size, hidden_size),
-            nn.ReLU(),
+            nn.GeLU(),
             nn.Linear(hidden_size, out_size),
             nn.Dropout(dropout),
         )

@@ -9,7 +9,7 @@ import os
 import glob
 import uuid
 from pathlib import Path
-from src import logger
+from src import logger, console
 
 from rich.progress import (
     Progress,
@@ -29,6 +29,7 @@ from tokenizers.pre_tokenizers import Whitespace
 from src.model.LM import SimpleBigramModel, AttentionLM
 from src.dataloaders import build_loaders, build_loaders_shakespeare
 from src.inference import inference
+from src.utils import RateColumn
 from hparams import Hparams
 
 
@@ -54,16 +55,20 @@ def train(device="cuda"):
     model = AttentionLM(hparams, vocab_size=tokenizer.get_vocab_size())
     logger.info(f"Loading model to device: {device}")
     model = model.to(device)
+
+    # print model summary
+    # we do this before compilation to avoid the prehooks screwing up torchdynamo
+    x_samp, _ = train_loader.dataset[0]
+    summary(model, input_data=x_samp.to(device))
+
     if hparams.compile_model:
         logger.info("Compiling model...")
-        model.compile()
+        model.compile(dynamic=True)
         logger.info("Model compiled")
 
     loss_fn = torch.nn.CrossEntropyLoss()
-    optim = torch.optim.AdamW(model.parameters())
-
-    x_samp, _ = train_loader.dataset[0]
-    summary(model, input_data=x_samp.to(device))
+    optim = torch.optim.AdamW(model.parameters(), fused=True, lr=hparams.lr)
+    scaler = torch.cuda.amp.GradScaler(enabled=hparams.half_precision)
 
     loss_buffer = hparams.windowed_loss_buffer_size
     save_pth = f"checkpoints/{str(uuid.uuid4())[:8]}"
@@ -77,9 +82,10 @@ def train(device="cuda"):
         with Progress(
             SpinnerColumn(),
             *Progress.get_default_columns(),
-            TimeElapsedColumn(),
+            RateColumn(),
             TextColumn("[bold blue]{task.fields[loss]}"),
-            transient=False,
+            transient=True,
+            console=console,
         ) as progress:
             windowed_loss = np.zeros(loss_buffer, dtype=np.float32)
             train_task = progress.add_task(
@@ -98,8 +104,16 @@ def train(device="cuda"):
 
                 loss = loss_fn(logits, y)
 
-                loss.backward()
-                optim.step()
+                scaler.scale(loss).backward()
+                # clip gradients
+                if hparams.gradient_clip_val != 0.0:
+                    scaler.unscale_(optim)
+                    torch.nn.utils.clip_grad_norm_(
+                        model.parameters(), hparams.gradient_clip_val
+                    )
+                scaler.step(optim)
+                scaler.update()
+                optim.zero_grad(set_to_none=True)
 
                 windowed_loss[step % loss_buffer] = loss
 
@@ -108,33 +122,34 @@ def train(device="cuda"):
                     advance=1,
                     loss=f"Train Loss: {windowed_loss.mean():.5f}",
                 )
-                optim.zero_grad(set_to_none=True)
 
                 if step % 100 == 0 and step > 0:
-                    # # evaluate model
-                    # model.eval()
-                    # val_loss = 0
-                    # val_task = progress.add_task(
-                    #     "[cyan]Validating...",
-                    #     total=len(val_loader),
-                    #     loss="Initializing...",
-                    # )
-                    # for val_step, (x, y) in enumerate(val_loader):
-                    #     x = x.to(device)
-                    #     y = y.to(device)
+                    # evaluate model
+                    model.eval()
+                    val_loss = 0
+                    val_task = progress.add_task(
+                        "[cyan]Validating...",
+                        total=len(val_loader),
+                        loss="Initializing...",
+                    )
+                    for val_step, (x, y) in enumerate(val_loader):
+                        x = x.to(device)
+                        y = y.to(device)
 
-                    #     logits = model(x)
-                    #     B, T, C = logits.shape
-                    #     logits = logits.view(B * T, C)
-                    #     y = y.view(B * T)
+                        logits = model(x)
+                        B, T, C = logits.shape
+                        logits = logits.view(B * T, C)
+                        y = y.view(B * T)
 
-                    #     loss = loss_fn(logits, y)
-                    #     val_loss += loss.item()
-                    #     progress.update(
-                    #         val_task, advance=1, loss=f"Val Loss: {loss/val_step:.5f}"
-                    #     )
-                    # progress.remove_task(val_task)
-                    # logger.info(f"Validation Loss: {val_loss / hparams.eval_steps:.5f}")
+                        loss = loss_fn(logits, y)
+                        val_loss += loss.item()
+                        progress.update(
+                            val_task,
+                            advance=1,
+                            loss=f"Val Loss: {val_loss / (val_step + 1):.5f}",
+                        )
+                    progress.remove_task(val_task)
+                    logger.info(f"Validation Loss: {val_loss / hparams.eval_steps:.5f}")
 
                     # generation test
                     tests = [

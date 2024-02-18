@@ -1,14 +1,14 @@
 from loguru import logger
 from rich.logging import RichHandler
+from rich.console import Console
 import logging
 import sys
 from pathlib import Path
 from hparams import Hparams
 
 hparams = Hparams()
-
-# setup logging file
-logger.add(Path(hparams.logging_path) / "sys.log", rotation="20 MB", compression="zip")
+console = Console()
+logger.remove()
 
 
 class InterceptHandler(logging.Handler):
@@ -30,4 +30,32 @@ class InterceptHandler(logging.Handler):
         )
 
 
-logging.basicConfig(handlers=[RichHandler(markup=True)], level=20, force=True)
+def _log_formatter(record: dict) -> str:
+    """Log message formatter"""
+    color_map = {
+        "TRACE": "dim blue",
+        "DEBUG": "cyan",
+        "INFO": "bold",
+        "SUCCESS": "bold green",
+        "WARNING": "yellow",
+        "ERROR": "bold red",
+        "CRITICAL": "bold white on red",
+    }
+    lvl_color = color_map.get(record["level"].name, "cyan")
+    return (
+        "[not bold green]{time:YYYY/MM/DD HH:mm:ss}[/not bold green] | {level.icon}"
+        + f"  - [{lvl_color}]{{message}}[/{lvl_color}]"
+    )
+
+
+# setup logging file
+logger.add(Path(hparams.logging_path) / "sys.log", rotation="20 MB", compression="zip")
+# setup rich passthrough
+logger.add(
+    console.print,
+    level="TRACE",
+    format=_log_formatter,
+    colorize=True,
+)
+
+logging.basicConfig(handlers=[RichHandler()], level=20, force=True)
