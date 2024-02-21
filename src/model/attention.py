@@ -20,20 +20,31 @@ class AttentionBlock(nn.Module):
         self.num_heads = hparams.num_heads
         self.embed_size = hparams.embed_size
         self.dropout = hparams.dropout
+        self.ff_mult = hparams.ff_internal_mult
 
+        self.ln_1 = nn.LayerNorm(self.embed_size)
         self.attention_heads = nn.ModuleList(
             [attention_func(hparams, emb_func) for _ in range(self.num_heads)]
         )
+        self.ln_2 = nn.LayerNorm(self.embed_size * self.num_heads)
+
+        self.resid_projection = nn.Linear(
+            self.embed_size, self.embed_size * self.num_heads
+        )
+
         self.ff = FeedForward(
-            input_size=self.num_heads * self.embed_size,
-            hidden_size=self.ff_hidden_size,
+            input_size=self.embed_size * self.num_heads,
             out_size=self.embed_size,
             dropout=self.dropout,
+            multiplier=self.ff_mult,
         )
 
     def forward(self, x):
-        x_out = torch.cat([layer(x) for layer in self.attention_heads], dim=-1)
-        x_out = self.ff(x_out)
+        x_out = self.ln_1(x)
+        x_att = torch.cat([layer(x_out) for layer in self.attention_heads], dim=-1)
+        x_resid_proj = self.resid_projection(x)
+        x_out = x_att + x_resid_proj
+        x_out = self.ff(self.ln_2(x_out))
 
         return x_out
 
@@ -78,7 +89,7 @@ class FullAttention(nn.Module):
 
         if self.use_flash:
             z = F.scaled_dot_product_attention(
-                q, k, v, attn_mask=self.mask, is_causal=True
+                q, k, v, attn_mask=self.mask, is_causal=self.masked
             )
 
         else:
