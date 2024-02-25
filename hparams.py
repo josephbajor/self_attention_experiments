@@ -22,17 +22,17 @@ class Hparams:
     ### training ###
     batch_size: int = 64
     epochs: int = 2
-    windowed_loss_buffer_size: int = 100
-    compile_model = False
-    eval_steps: Optional[int] = 30  # set to none for whole val dataset
+    windowed_loss_buffer_size: int = 20
+    compile_model = True
+    eval_steps: Optional[int] = 120  # set to none for whole val dataset
 
     ### model ###
     max_span: int = 256
-    embed_size: int = 128
+    embed_size: int = 384
     # att_block_size: int = 256
     num_heads: int = 6
     att_layers: int = 6
-    ff_internal_mult: int = 2
+    ff_internal_mult: int = 4
     dropout: float = 0.2
 
     att_func_type: Literal["full", "fnet"] = "full"

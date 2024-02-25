@@ -23,30 +23,20 @@ class AttentionBlock(nn.Module):
         self.ff_mult = hparams.ff_internal_mult
 
         self.ln_1 = nn.LayerNorm(self.embed_size)
-        self.attention_heads = nn.ModuleList(
-            [attention_func(hparams, emb_func) for _ in range(self.num_heads)]
-        )
-        self.ln_2 = nn.LayerNorm(self.embed_size * self.num_heads)
-
-        self.resid_projection = nn.Linear(
-            self.embed_size, self.embed_size * self.num_heads
-        )
+        self.attention = attention_func(hparams, emb_func)
+        self.ln_2 = nn.LayerNorm(self.embed_size)
 
         self.ff = FeedForward(
-            input_size=self.embed_size * self.num_heads,
-            out_size=self.embed_size,
+            input_size=self.embed_size,
             dropout=self.dropout,
             multiplier=self.ff_mult,
         )
 
     def forward(self, x):
-        x_out = self.ln_1(x)
-        x_att = torch.cat([layer(x_out) for layer in self.attention_heads], dim=-1)
-        x_resid_proj = self.resid_projection(x)
-        x_out = x_att + x_resid_proj
-        x_out = self.ff(self.ln_2(x_out))
+        x = x + self.attention(self.ln_1(x))
+        x = x + self.ff(self.ln_2(x))
 
-        return x_out
+        return x
 
 
 class FullAttention(nn.Module):
@@ -57,19 +47,28 @@ class FullAttention(nn.Module):
         masked: bool = False,
     ) -> None:
         super().__init__()
+        if hparams.embed_size % hparams.num_heads != 0:
+            raise ValueError(
+                f"Embed size {hparams.embed_size} must be divisible by num_heads {hparams.num_heads}"
+            )
 
         self.max_seq_len = hparams.max_span
         self.embed_size = hparams.embed_size
         self.use_flash = hparams.use_flash
+        self.n_heads = hparams.num_heads
+        self.dropout = hparams.dropout
 
-        self.q = nn.Linear(self.embed_size, self.embed_size, bias=False)
-        self.k = nn.Linear(self.embed_size, self.embed_size, bias=False)
-        self.v = nn.Linear(self.embed_size, self.embed_size, bias=False)
+        self.attention_components = nn.Linear(self.embed_size, 3 * self.embed_size)
+
+        self.output_projection = nn.Linear(self.embed_size, self.embed_size)
 
         self.masked = masked
         if masked:
             self.register_buffer(
-                "mask", torch.tril(torch.ones(self.max_seq_len, self.max_seq_len))
+                "mask",
+                torch.tril(torch.ones(self.max_seq_len, self.max_seq_len)).view(
+                    1, 1, self.max_seq_len, self.max_seq_len
+                ),
             )
         else:
             self.mask = None
@@ -80,16 +79,31 @@ class FullAttention(nn.Module):
             self.emb = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        q = self.q(x)
-        k = self.k(x)
-        v = self.v(x)
+        B, T, C = (
+            x.shape
+        )  # batch size, sequence length, embedding dimensionality (n_embd)
+        q, k, v = self.attention_components(x).split(self.embed_size, dim=2)
+        k = k.view(B, T, self.n_heads, C // self.n_heads).transpose(
+            1, 2
+        )  # (B, nh, T, hs)
+        q = q.view(B, T, self.n_heads, C // self.n_heads).transpose(
+            1, 2
+        )  # (B, nh, T, hs)
+        v = v.view(B, T, self.n_heads, C // self.n_heads).transpose(
+            1, 2
+        )  # (B, nh, T, hs)
 
         if self.emb is not None:
             q, k = self.emb(q, k)
 
         if self.use_flash:
             z = F.scaled_dot_product_attention(
-                q, k, v, attn_mask=self.mask, is_causal=self.masked
+                q,
+                k,
+                v,
+                attn_mask=self.mask,
+                is_causal=self.masked,
+                dropout_p=self.dropout if self.training else 0,
             )
 
         else:
@@ -100,10 +114,13 @@ class FullAttention(nn.Module):
                 )
 
             attention_values = F.softmax(
-                attention_values / np.sqrt(self.embed_size), dim=-1
+                attention_values / np.sqrt(q.shape[-1]), dim=-1
             )
 
             z = attention_values @ v
+
+        z = z.transpose(1, 2).contiguous().view(B, T, C)
+        z = self.output_projection(z)
 
         return z
 

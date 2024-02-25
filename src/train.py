@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Subset
+from torch.utils.data import Subset, DataLoader
 from torchinfo import summary
 
 import os
@@ -48,9 +48,9 @@ def train(device="cuda"):
     logger.info(f"Val Size: {len(val_loader.dataset)}")
     if hparams.eval_steps is not None:
         logger.info(f"clipping val loader to {hparams.eval_steps} samples")
-        val_loader = Subset(
-            val_loader, torch.randperm(len(val_loader))[: hparams.eval_steps]
-        ).dataset
+        val_loader = DataLoader(
+            Subset(val_loader, torch.randperm(len(val_loader))[: hparams.eval_steps])
+        )
 
     model = AttentionLM(hparams, vocab_size=tokenizer.get_vocab_size())
     logger.info(f"Loading model to device: {device}")
@@ -58,8 +58,13 @@ def train(device="cuda"):
 
     # print model summary
     # we do this before compilation to avoid the prehooks screwing up torchdynamo
-    x_samp, _ = train_loader.dataset[0]
-    summary(model, input_data=x_samp.to(device))
+    summary(
+        model,
+        input_size=(hparams.batch_size, hparams.max_span),
+        device=device,
+        dtypes=[torch.long],
+    )
+    print(model)
 
     if hparams.compile_model:
         logger.info("Compiling model...")

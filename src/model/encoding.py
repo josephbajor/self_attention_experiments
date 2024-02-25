@@ -9,9 +9,7 @@ class StaticBinaryPosEncoding(nn.Module):
     def __init__(self, hparams: Hparams) -> None:
         super().__init__()
 
-        self.emb = torch.tensor(
-            generate_rand_emb(hparams.att_block_size, hparams.max_span)
-        )
+        self.emb = torch.tensor(generate_rand_emb(hparams.embed_size, hparams.max_span))
 
     def forward(self, q, k):
         # move emb to current device if necessary

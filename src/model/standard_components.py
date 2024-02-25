@@ -11,14 +11,14 @@ class FeedForward(nn.Module):
     """
 
     def __init__(
-        self, input_size: int, out_size: int, multiplier: int = 4, dropout: float = 0.1
+        self, input_size: int, multiplier: int = 4, dropout: float = 0.1
     ) -> None:
         super().__init__()
 
         self.ff = nn.Sequential(
             nn.Linear(input_size, input_size * multiplier),
             nn.GELU(),
-            nn.Linear(input_size * multiplier, out_size),
+            nn.Linear(input_size * multiplier, input_size),
             nn.Dropout(dropout),
         )
 
