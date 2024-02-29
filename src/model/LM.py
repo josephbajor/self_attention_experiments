@@ -41,15 +41,17 @@ class AttentionLM(nn.Module):
         super().__init__()
 
         self.use_positional_embedding = hparams.use_positional_embedding
+        self.max_span = hparams.max_span
+
+        att_func_type = hparams.att_func_type
+        emb_func = hparams.emb_func
 
         # Network Components
         self.embed = nn.Embedding(vocab_size, hparams.embed_size)
         if self.use_positional_embedding:
             self.embed_pos = nn.Embedding(hparams.max_span, hparams.embed_size)
-        self.max_span = hparams.max_span
 
-        att_func_type = hparams.att_func_type
-        emb_func = hparams.emb_func
+        self.pre_att_dropout = nn.Dropout(hparams.dropout)
 
         self.attention = nn.ModuleList(
             [
@@ -62,7 +64,12 @@ class AttentionLM(nn.Module):
             ]
         )
 
-        self.linear = nn.Linear(hparams.embed_size, vocab_size)
+        self.post_att_layer_norm = nn.LayerNorm(hparams.embed_size)
+
+        self.ln_vocab_clf = nn.Linear(hparams.embed_size, vocab_size, bias=False)
+
+        # tie embedding and classifier weights
+        self.ln_vocab_clf.weight = self.embed.weight
 
     def get_param_count(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
@@ -73,13 +80,11 @@ class AttentionLM(nn.Module):
         if self.use_positional_embedding:
             pos_emb = self.embed_pos(torch.arange(x.shape[-1], device=x.device))
             x = emb + pos_emb
-
-        x = F.gelu(x)
-
+        x = self.pre_att_dropout(x)
         for layer in self.attention:
             x = layer(x)
-
-        x = self.linear(x)
+        x = self.post_att_layer_norm(x)
+        x = self.ln_vocab_clf(x)
 
         return x
 

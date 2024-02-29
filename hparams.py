@@ -22,11 +22,14 @@ class Hparams:
     ### training ###
     batch_size: int = 64
     epochs: int = 2
-    windowed_loss_buffer_size: int = 20
+    windowed_loss_buffer_size: int = 60
     compile_model = True
-    eval_steps: Optional[int] = 120  # set to none for whole val dataset
+    eval_steps: Optional[int] = 20  # set to none for whole val dataset
+    eval_every_n_steps: int = 30
 
     ### model ###
+    type: Literal["gpt", "nanogpt"] = "nanogpt"
+
     max_span: int = 256
     embed_size: int = 384
     # att_block_size: int = 256
@@ -37,8 +40,8 @@ class Hparams:
 
     att_func_type: Literal["full", "fnet"] = "full"
     emb_func: Optional[Literal["binary_static", "binary_learned"]] = None
-    use_positional_embedding: bool = True
-    use_flash: bool = True
+    use_positional_embedding: bool = False
+    use_flash: bool = False
 
     universal_pos_enc: bool = False
 

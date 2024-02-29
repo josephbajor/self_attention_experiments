@@ -125,6 +125,12 @@ def build_loaders_shakespeare(hparams: Hparams):
     train_set = ShakespeareDataset(data["train"], block_size=hparams.max_span)
     val_set = ShakespeareDataset(data["val"], block_size=hparams.max_span)
 
+    if hparams.eval_steps is not None:
+        val_set = torch.utils.data.Subset(
+            val_set,
+            torch.randperm(len(val_set))[: hparams.eval_steps * hparams.batch_size],
+        )
+
     train_loader = torch.utils.data.DataLoader(
         train_set,
         batch_size=hparams.batch_size,

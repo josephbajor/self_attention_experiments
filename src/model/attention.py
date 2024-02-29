@@ -61,6 +61,7 @@ class FullAttention(nn.Module):
         self.attention_components = nn.Linear(self.embed_size, 3 * self.embed_size)
 
         self.output_projection = nn.Linear(self.embed_size, self.embed_size)
+        self.output_dropout = nn.Dropout(self.dropout)
 
         self.masked = masked
         if masked:
@@ -120,7 +121,7 @@ class FullAttention(nn.Module):
             z = attention_values @ v
 
         z = z.transpose(1, 2).contiguous().view(B, T, C)
-        z = self.output_projection(z)
+        z = self.output_dropout(self.output_projection(z))
 
         return z
 

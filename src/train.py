@@ -1,32 +1,20 @@
 import numpy as np
-import pickle
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Subset, DataLoader
 from torchinfo import summary
 
-import os
-import glob
 import uuid
 from pathlib import Path
 from src import logger, console
 
 from rich.progress import (
     Progress,
-    BarColumn,
-    TimeRemainingColumn,
     SpinnerColumn,
     TextColumn,
-    TimeElapsedColumn,
+    MofNCompleteColumn,
 )
 
-from tokenizers import Tokenizer
-from tokenizers import decoders
-from tokenizers.models import BPE
-from tokenizers.trainers import BpeTrainer
-from tokenizers.pre_tokenizers import Whitespace
-
-from src.model.LM import SimpleBigramModel, AttentionLM
+from src.model.LM import AttentionLM
 from src.dataloaders import build_loaders, build_loaders_shakespeare
 from src.inference import inference
 from src.utils import RateColumn
@@ -44,15 +32,23 @@ def train(device="cuda"):
         tokenizer, train_loader, val_loader = build_loaders_shakespeare(hparams)
 
     logger.info(f"Vocab Size: {tokenizer.get_vocab_size()}")
-    logger.info(f"Train Size: {len(train_loader.dataset)}")
-    logger.info(f"Val Size: {len(val_loader.dataset)}")
-    if hparams.eval_steps is not None:
-        logger.info(f"clipping val loader to {hparams.eval_steps} samples")
-        val_loader = DataLoader(
-            Subset(val_loader, torch.randperm(len(val_loader))[: hparams.eval_steps])
-        )
+    logger.info(f"Train Size: {len(train_loader)}")
+    logger.info(f"Val Size: {len(val_loader)}")
 
-    model = AttentionLM(hparams, vocab_size=tokenizer.get_vocab_size())
+    if hparams.type == "gpt":
+        model = AttentionLM(hparams, vocab_size=tokenizer.get_vocab_size())
+    if hparams.type == "nanogpt":
+        from model import GPTConfig, GPT
+
+        gpt_args = dict(
+            n_layer=hparams.att_layers,
+            n_head=hparams.num_heads,
+            n_embd=hparams.embed_size,
+            block_size=hparams.max_span,
+            vocab_size=tokenizer.get_vocab_size(),
+        )
+        model = GPT(GPTConfig(**gpt_args))
+
     logger.info(f"Loading model to device: {device}")
     model = model.to(device)
 
@@ -80,7 +76,8 @@ def train(device="cuda"):
     Path(f"{save_pth}").mkdir(exist_ok=True, parents=True)
     hparams.save_to_file(f"{save_pth}/hparams.json")
 
-    logger.info(f"model params: {model.get_param_count()}")
+    if hparams.type == "gpt":
+        logger.info(f"model params: {model.get_param_count()}")
 
     model.train()
     for epoch in range(hparams.epochs):
@@ -88,6 +85,7 @@ def train(device="cuda"):
             SpinnerColumn(),
             *Progress.get_default_columns(),
             RateColumn(),
+            MofNCompleteColumn(),
             TextColumn("[bold blue]{task.fields[loss]}"),
             transient=True,
             console=console,
@@ -102,12 +100,12 @@ def train(device="cuda"):
                 x = x.to(device)
                 y = y.to(device)
 
-                logits = model(x)
-                B, T, C = logits.shape
-                logits = logits.view(B * T, C)
-                y = y.view(B * T)
+                if hparams.type == "nanogpt":
+                    logits, loss = model(x, y)
 
-                loss = loss_fn(logits, y)
+                elif hparams.type == "gpt":
+                    logits = model(x)
+                    loss = loss_fn(logits.transpose(-1, -2), y)
 
                 scaler.scale(loss).backward()
                 # clip gradients
@@ -125,10 +123,10 @@ def train(device="cuda"):
                 progress.update(
                     train_task,
                     advance=1,
-                    loss=f"Train Loss: {windowed_loss.mean():.5f}",
+                    loss=f"Train Loss: {windowed_loss[:step+1].mean():.5f}",
                 )
 
-                if step % 100 == 0 and step > 0:
+                if step % hparams.eval_every_n_steps == 0 and step > 0:
                     # evaluate model
                     model.eval()
                     val_loss = 0
@@ -141,12 +139,16 @@ def train(device="cuda"):
                         x = x.to(device)
                         y = y.to(device)
 
-                        logits = model(x)
-                        B, T, C = logits.shape
-                        logits = logits.view(B * T, C)
-                        y = y.view(B * T)
+                        if hparams.type == "nanogpt":
+                            logits, loss = model(x, y)
+                        elif hparams.type == "gpt":
+                            logits = model(x)
+                            B, T, C = logits.shape
+                            logits = logits.view(B * T, C)
+                            y = y.view(B * T)
 
-                        loss = loss_fn(logits, y)
+                            loss = loss_fn(logits, y)
+
                         val_loss += loss.item()
                         progress.update(
                             val_task,
@@ -154,14 +156,10 @@ def train(device="cuda"):
                             loss=f"Val Loss: {val_loss / (val_step + 1):.5f}",
                         )
                     progress.remove_task(val_task)
-                    logger.info(f"Validation Loss: {val_loss / hparams.eval_steps:.5f}")
+                    logger.info(f"Validation Loss: {val_loss / (val_step + 1):.5f}")
 
                     # generation test
-                    tests = [
-                        "Hello ",
-                        "The",
-                        "W",
-                    ]
+                    tests = ["Hello ", "The", "W", "This is ", "Wher"]
 
                     logger.info(f"generation test | step {step}:")
 
