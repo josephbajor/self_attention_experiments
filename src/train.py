@@ -100,12 +100,13 @@ def train(device="cuda"):
                 x = x.to(device)
                 y = y.to(device)
 
-                if hparams.type == "nanogpt":
-                    logits, loss = model(x, y)
+                with torch.cuda.amp.autocast(enabled=hparams.half_precision):
+                    if hparams.type == "nanogpt":
+                        logits, loss = model(x, y)
 
-                elif hparams.type == "gpt":
-                    logits = model(x)
-                    loss = loss_fn(logits.transpose(-1, -2), y)
+                    elif hparams.type == "gpt":
+                        logits = model(x)
+                        loss = loss_fn(logits.transpose(-1, -2), y)
 
                 scaler.scale(loss).backward()
                 # clip gradients
@@ -168,7 +169,7 @@ def train(device="cuda"):
                             test,
                             model,
                             tokenizer,
-                            out_len=20,
+                            out_len=80,
                             determenistic=False,
                             device=device,
                             mode=hparams.dataset,
@@ -178,7 +179,7 @@ def train(device="cuda"):
                     # put model back into training mode
                     model.train()
 
-                if step % 10000 == 0 and step > 0:
+                if step % 3000 == 0 and step > 0:
                     # save training checkpoint
                     logger.info(f"Saving checkpoint at step {step} to {save_pth}")
                     torch.save(model.state_dict(), f"{save_pth}/model.pth")

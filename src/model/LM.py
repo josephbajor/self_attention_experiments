@@ -43,8 +43,9 @@ class AttentionLM(nn.Module):
         self.use_positional_embedding = hparams.use_positional_embedding
         self.max_span = hparams.max_span
 
-        att_func_type = hparams.att_func_type
-        emb_func = hparams.emb_func
+        self.att_func_type = hparams.att_func_type
+        self.emb_func = hparams.emb_func
+        self.embed_size = hparams.embed_size
 
         # Network Components
         self.embed = nn.Embedding(vocab_size, hparams.embed_size)
@@ -56,9 +57,13 @@ class AttentionLM(nn.Module):
         self.attention = nn.ModuleList(
             [
                 AttentionBlock(
-                    attention_func=ATT_FUNC_MAP[att_func_type],
+                    attention_func=ATT_FUNC_MAP[self.att_func_type],
                     hparams=hparams,
-                    emb_func=ENC_FUNC_MAP[emb_func] if emb_func is not None else None,
+                    emb_func=(
+                        ENC_FUNC_MAP[self.emb_func]
+                        if self.emb_func is not None
+                        else None
+                    ),
                 )
                 for _ in range(hparams.att_layers)
             ]
@@ -80,6 +85,8 @@ class AttentionLM(nn.Module):
         if self.use_positional_embedding:
             pos_emb = self.embed_pos(torch.arange(x.shape[-1], device=x.device))
             x = emb + pos_emb
+        else:  # no positional embedding
+            x = emb
         x = self.pre_att_dropout(x)
         for layer in self.attention:
             x = layer(x)

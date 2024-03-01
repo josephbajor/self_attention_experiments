@@ -44,7 +44,7 @@ class FullAttention(nn.Module):
         self,
         hparams: Hparams,
         emb_func: Optional[nn.Module] = None,
-        masked: bool = False,
+        masked: bool = True,
     ) -> None:
         super().__init__()
         if hparams.embed_size % hparams.num_heads != 0:
@@ -102,7 +102,6 @@ class FullAttention(nn.Module):
                 q,
                 k,
                 v,
-                attn_mask=self.mask,
                 is_causal=self.masked,
                 dropout_p=self.dropout if self.training else 0,
             )
@@ -111,7 +110,7 @@ class FullAttention(nn.Module):
             attention_values = q @ k.transpose(-2, -1)
             if self.masked:
                 attention_values = attention_values.masked_fill(
-                    self.mask == 0, float("-inf")
+                    self.mask[:, :, :T, :T] == 0, float("-inf")
                 )
 
             attention_values = F.softmax(

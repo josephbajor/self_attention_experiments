@@ -89,6 +89,12 @@ def build_loaders(hparams: Hparams):
     val_set = Wiki103Dataset(data["val"], block_size=hparams.max_span)
     test_set = Wiki103Dataset(data["test"], block_size=hparams.max_span)
 
+    if hparams.eval_steps is not None:
+        val_set = torch.utils.data.Subset(
+            val_set,
+            torch.randperm(len(val_set))[: hparams.eval_steps * hparams.batch_size],
+        )
+
     train_loader = torch.utils.data.DataLoader(
         train_set,
         batch_size=hparams.batch_size,

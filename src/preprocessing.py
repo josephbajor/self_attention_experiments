@@ -10,7 +10,7 @@ from pathlib import Path
 
 from src import logger
 
-from tokenizers import Tokenizer
+from tokenizers import Tokenizer, decoders
 from tokenizers.models import BPE, WordPiece
 from tokenizers.trainers import BpeTrainer, WordPieceTrainer
 from tokenizers.pre_tokenizers import Whitespace
@@ -78,6 +78,9 @@ def preprocess_wikitext_wordpeice(path, vocab_size):
         data_out[fname] = np.concatenate(
             [np.array(t.ids, dtype=np.int32) for t in tokens]
         )
+
+    # add wordpeice decoder to tokenizer
+    tokenizer.decoder = decoders.WordPiece()
 
     return data_out, tokenizer
 
@@ -172,7 +175,7 @@ if __name__ == "__main__":
         logger.info("Saving tokenizer...")
         tokenizer.save(f"{hparams.tokenized_dir}/tokenizer.json")
 
-    if args.dataset == "shakespeare":
+    elif args.dataset == "shakespeare":
         hparams = Hparams()
         preprocess_shakespeare_char(hparams.tokenized_dir, hparams.train_split)
         logger.info("Shakespeare data preprocessed and saved to disk")
