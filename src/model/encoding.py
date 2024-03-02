@@ -9,7 +9,9 @@ class StaticBinaryPosEncoding(nn.Module):
     def __init__(self, hparams: Hparams) -> None:
         super().__init__()
 
-        self.emb = torch.tensor(generate_rand_emb(hparams.embed_size, hparams.max_span))
+        self.head_size = hparams.embed_size // hparams.num_heads
+
+        self.emb = torch.tensor(generate_rand_emb(self.head_size, hparams.max_span))
 
     def forward(self, q, k):
         # move emb to current device if necessary
@@ -35,11 +37,11 @@ class BinaryPosEncoding(nn.Module):
         super().__init__()
         self.universal = hparams.universal_pos_enc
 
-        self.E1 = nn.Linear(hparams.att_block_size, hparams.att_block_size, bias=False)
+        self.head_size = hparams.embed_size // hparams.num_heads
+
+        self.E1 = nn.Linear(self.head_size, self.head_size, bias=False)
         if not self.universal:
-            self.E2 = nn.Linear(
-                hparams.att_block_size, hparams.att_block_size, bias=False
-            )
+            self.E2 = nn.Linear(self.head_size, self.head_size, bias=False)
 
     def forward(self, q, k):
         self.index = torch.arange(

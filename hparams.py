@@ -25,7 +25,7 @@ class Hparams:
     windowed_loss_buffer_size: int = 60
     compile_model = True
     eval_steps: Optional[int] = 25  # set to none for whole val dataset
-    eval_every_n_steps: int = 100
+    eval_every_n_steps: int = 400
 
     ### model ###
     type: Literal["gpt", "nanogpt"] = "gpt"
@@ -39,8 +39,8 @@ class Hparams:
     dropout: float = 0.2
 
     att_func_type: Literal["full", "fnet"] = "full"
-    emb_func: Optional[Literal["binary_static", "binary_learned"]] = None
-    use_positional_embedding: bool = True
+    emb_func: Optional[Literal["binary_static", "binary_learned"]] = "binary_learned"
+    use_positional_embedding: bool = False
     use_flash: bool = True
 
     universal_pos_enc: bool = False
