@@ -130,16 +130,15 @@ class FnetAttention(nn.Module):
         self,
         hparams: Hparams,
         emb_func: Optional[nn.Module] = None,
-        masked: bool = False,
+        masked: bool = True,
     ) -> None:
         super().__init__()
 
         self.max_seq_len = hparams.max_span
         self.embed_size = hparams.embed_size
-        self.block_size = hparams.att_block_size
 
-        self.q = nn.Linear(self.embed_size, self.block_size, bias=False)
-        self.k = nn.Linear(self.embed_size, self.block_size, bias=False)
+        self.q = nn.Linear(self.embed_size, self.embed_size, bias=False)
+        self.k = nn.Linear(self.embed_size, self.embed_size, bias=False)
 
         if masked:
             self.register_buffer(

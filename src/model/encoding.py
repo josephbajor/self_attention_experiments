@@ -19,7 +19,7 @@ class StaticBinaryPosEncoding(nn.Module):
             self.emb = self.emb.to(q.device)
 
         if len(q.shape) > 2:
-            emb = self.emb.repeat(q.shape[0], 1, 1)
+            emb = self.emb.repeat(q.shape[0], q.shape[1], 1, 1)
         else:
             emb = self.emb
 

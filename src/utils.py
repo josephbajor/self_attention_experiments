@@ -1,6 +1,11 @@
 import numpy as np
 from rich.progress import ProgressColumn, Task, filesize
 from rich.text import Text
+from hparams import Hparams
+import wandb
+import torch
+import time
+import os
 
 
 def generate_rand_emb(x, y):
@@ -30,3 +35,34 @@ class RateColumn(ProgressColumn):
         )
         data_speed = speed / unit
         return Text(f"{data_speed:.1f}{suffix} it/s", style="progress.percentage")
+
+
+def initiate_run(hparams: Hparams, model: torch.nn.Module):
+    """
+    Initialize connection to wandb and begin the run using provided hparams
+    """
+    # load wandb key from local environment
+    # api_key = os.getenv("WANDB_API_KEY")
+    api_key = "c319fb8dfa7ce22e07aa0cefe0823a9752d50720"
+
+    wandb.login(key=api_key)
+
+    if hparams.use_wandb:
+        mode = "online"
+    else:
+        mode = "disabled"
+
+    run = wandb.init(
+        name=f"{hparams.architecture}_{int(time.time())}",
+        project=hparams.project,
+        config=hparams.to_dict(),
+        mode=mode,
+    )
+
+    wandb.watch(model, log="gradients", log_freq=500)
+
+    wandb.config.update(  # Add model parameter count
+        {"parameters": sum(p.numel() for p in model.parameters() if p.requires_grad)}
+    )
+
+    return run

@@ -24,8 +24,8 @@ class Hparams:
     epochs: int = 2
     windowed_loss_buffer_size: int = 60
     compile_model = True
-    eval_steps: Optional[int] = 25  # set to none for whole val dataset
-    eval_every_n_steps: int = 400
+    eval_steps: Optional[int] = 30  # set to none for whole val dataset
+    eval_every_n_steps: int = 300
 
     ### model ###
     type: Literal["gpt", "nanogpt"] = "gpt"
@@ -39,8 +39,8 @@ class Hparams:
     dropout: float = 0.2
 
     att_func_type: Literal["full", "fnet"] = "full"
-    emb_func: Optional[Literal["binary_static", "binary_learned"]] = "binary_learned"
-    use_positional_embedding: bool = False
+    emb_func: Optional[Literal["binary_static", "binary_learned"]] = None
+    use_positional_embedding: bool = True
     use_flash: bool = True
 
     universal_pos_enc: bool = False
@@ -48,11 +48,17 @@ class Hparams:
     ### optimizer ###
     lr = 1e-3
     weight_decay = 0.01
-    gradient_clip_val = 1.0
+    gradient_clip_val = 1.5
     half_precision = True
 
     ### logging ###
+    use_wandb: bool = True
+    architecture: str = "minigpt"
+    project: str = "pos_enc_experiments"
 
     def save_to_file(self, file_path: str):
         with open(file_path, "w") as f:
             f.write(json.dumps(asdict(self), indent=4))
+
+    def to_dict(self):
+        return asdict(self)

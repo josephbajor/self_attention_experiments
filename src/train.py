@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torchinfo import summary
+import wandb
 
 import uuid
 from pathlib import Path
@@ -17,7 +18,7 @@ from rich.progress import (
 from src.model.LM import AttentionLM
 from src.dataloaders import build_loaders, build_loaders_shakespeare
 from src.inference import inference
-from src.utils import RateColumn
+from src.utils import RateColumn, initiate_run
 from hparams import Hparams
 
 
@@ -78,6 +79,8 @@ def train(device="cuda"):
 
     if hparams.type == "gpt":
         logger.info(f"model params: {model.get_param_count()}")
+
+    run = initiate_run(hparams, model)
 
     model.train()
     for epoch in range(hparams.epochs):
@@ -159,6 +162,14 @@ def train(device="cuda"):
                     progress.remove_task(val_task)
                     logger.info(f"Validation Loss: {val_loss / (val_step + 1):.5f}")
 
+                    wandb.log(
+                        {
+                            "train_loss": windowed_loss[: step + 1].mean(),
+                            "val_loss": val_loss / (val_step + 1),
+                            "learning_Rate": optim.param_groups[0]["lr"],
+                        }
+                    )
+
                     # generation test
                     tests = ["Hello ", "The", "W", "This is ", "Wher"]
 
@@ -183,5 +194,6 @@ def train(device="cuda"):
                     # save training checkpoint
                     logger.info(f"Saving checkpoint at step {step} to {save_pth}")
                     torch.save(model.state_dict(), f"{save_pth}/model.pth")
+                    hparams.save_to_file(f"{save_pth}/hparams.json")
 
             logger.info(loss)
